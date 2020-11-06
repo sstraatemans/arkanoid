@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arkanoid</title>
+  </head>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      background-color: rebeccapurple;
+    }
+    .lives-wrapper {
+      position: relative;
+      z-index: 1;
+    }
+    #lost-wrapper {
+      display: none;
+      z-index: 1;
+    }
+    #timer {
+      display: none;
+      z-index: 1;
+    }
+
+    .show {
+      position: relative;
+      display: block !important;
+    }
+  </style>
+  <body>
+    <div class="wrapper">
+      <canvas id="canvas" width="640" height="480"></canvas>
+      <div class="lives-wrapper">Lives: <span id="lives"></span></div>
+      <div id="timer">3</div>
+      <div id="start">
+        <button id="start">start</button>
+      </div>
+      <div id="lost-wrapper">
+        Game over
+        <button id="restart">restart</button>
+      </div>
+    </div>
+
+    <script>
+      const MAX_LIVES = 3;
+      let canvas, ctx;
+      let lives = MAX_LIVES;
+
+      const DIRECTION = {
+        LEFT: 0,
+        RIGHT: 1,
+      };
+
+      const SPEED = {
+        horizontal: 2,
+        vertical: 2,
+      };
+
+      const ball = {
+        isMoving: false,
+        ball: {},
+        init() {
+          this.ball = { x: canvas.width / 2, y: 100, radius:5 };
+
+          this.start();
+          this.draw();
+          this.move();
+          this.randomDirection();
+        },
+        area(){
+          return {
+            topLeft: {x: this.ball.x - this.ball.radius, y: this.ball.y - this.ball.radius},
+            topRight: { x: this.ball.x + this.ball.radius, y: this.ball.y - this.ball.radius },
+            bottomRight: { x: this.ball.x + this.ball.radius, y: this.ball.y + this.ball.radius },
+            bottomLeft: { x: this.ball.x - this.ball.radius, y: this.ball.y + this.ball.radius }
+          }
+        },
+        start() {
+          this.isMoving = true;
+        },
+        stop() {
+          this.init();
+          this.isMoving = false;
+        },
+        draw() {
+          ctx.beginPath();
+          ctx.arc(this.ball.x, this.ball.y, this.ball.radius, 0, 2 * Math.PI);
+          ctx.fillStyle = 'white';
+          ctx.fill();
+          ctx.closePath();
+        },
+        randomDirection() {
+          this.setDirection(Math.random());
+        },
+        setDirection(positionPercentage) {
+          //debugger
+          const horizontal = positionPercentage * 2 + 1;
+          SPEED.horizontal =
+            positionPercentage < 0.5 ? -horizontal : horizontal;
+            SPEED.vertical = 4 - Math.abs(SPEED.horizontal);
+
+        },
+        move() {
+          this.draw();
+          if (!this.isMoving) return;
+          if (this.ball.y <= 0) SPEED.vertical = -SPEED.vertical;
+          if (this.ball.y >= canvas.height) {
+            game.looseLive();
+          }
+          if (this.ball.x >= canvas.width || this.ball.x <= 0)
+            SPEED.horizontal = -SPEED.horizontal;
+
+          this.ball.x = this.ball.x + SPEED.horizontal;
+          this.ball.y = this.ball.y + SPEED.vertical;
+        },
+        hasDetection({area}){
+          if(
+            (this.area().bottomRight.x >= area().topLeft.x && this.area().bottomRight.y >= area().topLeft.y) &&
+            (this.area().topLeft.x <= area().bottomRight.x && this.area().topLeft.y <= area().bottomRight.y)
+            ){
+              return true;
+            }
+          return false;
+        },
+        detectCollision(obj) {
+          if(this.hasDetection(obj)){
+            obj.onCollision(this);
+          }
+        },
+      };
+
+      const slider = {
+        _direction: null,
+        box: {},
+        init() {
+          this.box = { x: 40, y: canvas.height - 25, width: 100, height: 20 };
+          ctx.fillRect(this.box.x, this.box.y, this.box.width, this.box.height);
+          this.area = this.area.bind(this);
+          this.onCollision = this.onCollision.bind(this);
+        },
+        onCollision(b) {
+          // on collission with the ball, the ball should change trajectory, depending on where on the slider it hit
+          // the more to the right it hit, the more to the right the ball will go
+          // the more to the left it hit, the more to the left the ball will go
+          const positionOnSlider =
+              ((b.ball.x - b.ball.radius) -
+                this.box.x) /
+              this.box.width;
+            b.setDirection(positionOnSlider);
+            SPEED.vertical = -SPEED.vertical;
+        },
+        area() {
+          return {
+            topLeft: { x: this.box.x, y: this.box.y },
+            topRight: { x: this.box.x + this.box.width, y: this.box.y },
+            bottomRight: { x: this.box.x + this.box.width, y: this.box.y + this.box.height },
+            bottomLeft: { x: this.box.x, y: this.box.y + this.box.height }
+          }
+        },
+        set direction(val) {
+          if (this._direction === val) return (this._direction = null);
+          this._direction = val;
+          this.draw();
+        },
+        get direction() {
+          return this._direction;
+        },
+        draw() {
+          if (this.direction === DIRECTION.LEFT) {
+            this.box.x = this.box.x - 3;
+          } else if (this.direction === DIRECTION.RIGHT) {
+            this.box.x = this.box.x + 3;
+          }
+          ctx.fillRect(this.box.x, this.box.y, this.box.width, this.box.height);
+
+          // check boundries
+          if (this.box.x <= 0) this.box.x = 0;
+          if (this.box.x >= canvas.width - this.box.width)
+            this.box.x = canvas.width - this.box.width;
+        },
+      };
+
+      const block = {
+        init() {},
+      };
+
+      const game = {
+        ball: {},
+        slider: {},
+        init(b, s) {
+          this.ball = b;
+          this.slider = s;
+          canvas = document.querySelector('#canvas');
+          document.onkeydown = function (e) {
+            //TODO: debounce the keydown when its kept pressed
+            if (e.keyCode == 37) slider.direction = DIRECTION.LEFT;
+            if (e.keyCode == 39) slider.direction = DIRECTION.RIGHT;
+          };
+
+          ctx = canvas.getContext('2d');
+
+          //buttons
+          document
+            .querySelector('#start')
+            .addEventListener('click', this.restartAction.bind(this));
+          document
+            .querySelector('#restart')
+            .addEventListener('click', this.restartAction.bind(this));
+
+          this.slider.init();
+          this.ball.init();
+          this.ball.stop();
+          this.draw();
+          this.startTimer();
+          this.setLives();
+        },
+        draw() {
+          ctx.clearRect(0, 0, 640, 480);
+          this.slider.draw();
+          this.ball.move();
+          this.ball.detectCollision(this.slider);
+
+          this.timeout = setTimeout(() => {
+            this.draw();
+          }, 10);
+        },
+        setLives() {
+          const wrapper = document.querySelector('#lives');
+          wrapper.innerHTML = lives;
+        },
+        looseLive() {
+          lives--;
+          const wrapper = document.querySelector('#lives');
+          wrapper.innerHTML = lives;
+
+          if (lives <= 0) {
+            this.endGame();
+          } else {
+            this.resetGame();
+          }
+        },
+        resetGame() {
+          this.ball.stop();
+          this.startTimer();
+        },
+        endGame() {
+          this.ball.stop();
+          document.querySelector('#lost-wrapper').classList.add('show');
+        },
+        startTimer(count = 4) {
+          document.querySelector('#lost-wrapper').classList.remove('show');
+          document.querySelector('#start').classList.remove('show');
+          const timer = document.querySelector('#timer');
+          timer.classList.add('show');
+
+          count--;
+          timer.innerHTML = count;
+
+          if (count > -1) {
+            setTimeout(() => this.startTimer(count), 1000);
+          } else {
+            timer.classList.remove('show');
+            this.ball.init();
+          }
+        },
+        restartAction() {
+          lives = MAX_LIVES;
+          this.setLives();
+          this.startTimer();
+        },
+      };
+
+      window.addEventListener('load', () => game.init(ball, slider), false);
+    </script>
+  </body>
+</html>
